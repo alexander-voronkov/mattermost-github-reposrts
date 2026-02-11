@@ -79,12 +79,18 @@ func (p *Plugin) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// StatsRequest represents the request for stats
-type StatsRequest struct {
-	WeekStart string   `json:"week_start"` // ISO week format: 2026-W05
-	WeekEnd   string   `json:"week_end"`
-	Users     []string `json:"users"`      // MM user IDs to include
-	Repos     []string `json:"repos"`      // Repo names to include
+// WeeklyRepoStats stores cached stats for a repo+week
+type WeeklyRepoStats struct {
+	Week      string                  `json:"week"`
+	Repo      string                  `json:"repo"`
+	Users     map[string]WeekUserStat `json:"users"` // github login -> stats
+	FetchedAt string                  `json:"fetched_at"`
+}
+
+type WeekUserStat struct {
+	Commits int `json:"commits"`
+	Added   int `json:"added"`
+	Removed int `json:"removed"`
 }
 
 // UserStats represents stats for a single user
@@ -95,7 +101,7 @@ type UserStats struct {
 	Commits    int            `json:"commits"`
 	Added      int            `json:"added"`
 	Removed    int            `json:"removed"`
-	ByRepo     map[string]int `json:"by_repo"` // repo -> commits
+	ByRepo     map[string]int `json:"by_repo"`
 }
 
 // StatsResponse represents the stats response
@@ -114,43 +120,35 @@ func (p *Plugin) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse request
 	weekStart := r.URL.Query().Get("week_start")
 	weekEnd := r.URL.Query().Get("week_end")
-	
-	if weekStart == "" || weekEnd == "" {
-		// Default to current week
-		now := time.Now()
-		year, week := now.ISOWeek()
-		weekStart = fmt.Sprintf("%d-W%02d", year, week-1)
-		weekEnd = fmt.Sprintf("%d-W%02d", year, week)
-	}
 
-	// Convert week to date range
-	startDate := weekToDate(weekStart)
-	endDate := weekToDate(weekEnd)
-	// End date should be end of week
-	endDate = endDate.AddDate(0, 0, 7)
+	now := time.Now()
+	currentYear, currentWeek := now.ISOWeek()
+	currentWeekStr := fmt.Sprintf("%d-W%02d", currentYear, currentWeek)
+
+	if weekStart == "" || weekEnd == "" {
+		weekStart = fmt.Sprintf("%d-W%02d", currentYear, currentWeek-4)
+		weekEnd = currentWeekStr
+	}
 
 	// Parse user mappings
-	mappings := make(map[string]string) // github login -> mm user id
-	reverseMappings := make(map[string]string) // mm user id -> github login
+	mappings := make(map[string]string)
 	if config.UserMappings != "" {
 		json.Unmarshal([]byte(config.UserMappings), &mappings)
-		for gh, mm := range mappings {
-			reverseMappings[mm] = gh
-		}
 	}
 
-	client := &http.Client{}
 	repos := strings.Split(config.Repositories, ",")
 	
-	// Track stats per GitHub user
+	// Aggregate stats per user
 	userCommits := make(map[string]int)
 	userAdded := make(map[string]int)
 	userRemoved := make(map[string]int)
 	userByRepo := make(map[string]map[string]int)
 	activeRepos := make(map[string]bool)
+
+	// Generate list of weeks to fetch
+	weeks := p.getWeeksInRange(weekStart, weekEnd)
 
 	for _, repo := range repos {
 		repo = strings.TrimSpace(repo)
@@ -163,73 +161,23 @@ func (p *Plugin) handleGetStats(w http.ResponseWriter, r *http.Request) {
 			shortRepo = repo[idx+1:]
 		}
 
-		// Get commits in date range
-		commitsURL := fmt.Sprintf(
-			"https://api.github.com/repos/%s/commits?since=%s&until=%s&per_page=100",
-			repo,
-			startDate.Format(time.RFC3339),
-			endDate.Format(time.RFC3339),
-		)
-		
-		req, _ := http.NewRequest("GET", commitsURL, nil)
-		req.Header.Set("Authorization", "Bearer "+config.GitHubToken)
-		req.Header.Set("Accept", "application/vnd.github+json")
-
-		resp, err := client.Do(req)
-		if err != nil || resp.StatusCode != 200 {
-			if resp != nil {
-				resp.Body.Close()
-			}
-			continue
-		}
-
-		var commits []struct {
-			SHA    string `json:"sha"`
-			Author *struct {
-				Login string `json:"login"`
-			} `json:"author"`
-		}
-		json.NewDecoder(resp.Body).Decode(&commits)
-		resp.Body.Close()
-
-		if len(commits) > 0 {
-			activeRepos[shortRepo] = true
-		}
-
-		for _, c := range commits {
-			if c.Author == nil || c.Author.Login == "" {
+		for _, week := range weeks {
+			weekStats := p.getWeeklyStats(repo, week, week == currentWeekStr, config.GitHubToken)
+			if weekStats == nil {
 				continue
 			}
-			login := c.Author.Login
-			userCommits[login]++
-			
-			if userByRepo[login] == nil {
-				userByRepo[login] = make(map[string]int)
-			}
-			userByRepo[login][shortRepo]++
 
-			// Get commit details for lines added/removed (only for first 50 commits to avoid rate limit)
-			if userCommits[login] <= 50 {
-				detailURL := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, c.SHA)
-				detailReq, _ := http.NewRequest("GET", detailURL, nil)
-				detailReq.Header.Set("Authorization", "Bearer "+config.GitHubToken)
-				detailReq.Header.Set("Accept", "application/vnd.github+json")
-
-				detailResp, err := client.Do(detailReq)
-				if err == nil && detailResp.StatusCode == 200 {
-					var detail struct {
-						Stats struct {
-							Additions int `json:"additions"`
-							Deletions int `json:"deletions"`
-						} `json:"stats"`
-					}
-					json.NewDecoder(detailResp.Body).Decode(&detail)
-					userAdded[login] += detail.Stats.Additions
-					userRemoved[login] += detail.Stats.Deletions
+			for login, stat := range weekStats.Users {
+				if stat.Commits > 0 {
+					activeRepos[shortRepo] = true
 				}
-				if detailResp != nil {
-					detailResp.Body.Close()
+				userCommits[login] += stat.Commits
+				userAdded[login] += stat.Added
+				userRemoved[login] += stat.Removed
+				if userByRepo[login] == nil {
+					userByRepo[login] = make(map[string]int)
 				}
+				userByRepo[login][shortRepo] += stat.Commits
 			}
 		}
 	}
@@ -237,6 +185,9 @@ func (p *Plugin) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	// Build response with MM user info
 	var users []UserStats
 	for ghLogin, commits := range userCommits {
+		if commits == 0 {
+			continue
+		}
 		mmUserID := mappings[ghLogin]
 		mmUsername := ""
 		name := ghLogin
@@ -272,7 +223,6 @@ func (p *Plugin) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Convert repos map to slice
 	var reposList []string
 	for r := range activeRepos {
 		reposList = append(reposList, r)
@@ -287,6 +237,123 @@ func (p *Plugin) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+// getWeeksInRange returns list of ISO weeks between start and end
+func (p *Plugin) getWeeksInRange(start, end string) []string {
+	var weeks []string
+	current := start
+	for current <= end {
+		weeks = append(weeks, current)
+		current = p.nextWeek(current)
+	}
+	return weeks
+}
+
+// nextWeek returns the next ISO week
+func (p *Plugin) nextWeek(week string) string {
+	var year, wn int
+	fmt.Sscanf(week, "%d-W%d", &year, &wn)
+	wn++
+	// Check if week exists in year (most years have 52, some have 53)
+	lastWeek := 52
+	dec31 := time.Date(year, 12, 31, 0, 0, 0, 0, time.UTC)
+	if _, w := dec31.ISOWeek(); w == 53 {
+		lastWeek = 53
+	}
+	if wn > lastWeek {
+		year++
+		wn = 1
+	}
+	return fmt.Sprintf("%d-W%02d", year, wn)
+}
+
+// getWeeklyStats gets stats for a repo+week, using cache for past weeks
+func (p *Plugin) getWeeklyStats(repo, week string, isCurrentWeek bool, token string) *WeeklyRepoStats {
+	cacheKey := fmt.Sprintf("gh_stats_%s_%s", strings.ReplaceAll(repo, "/", "_"), week)
+
+	// Try cache for past weeks
+	if !isCurrentWeek {
+		if data, err := p.API.KVGet(cacheKey); err == nil && data != nil {
+			var cached WeeklyRepoStats
+			if json.Unmarshal(data, &cached) == nil {
+				return &cached
+			}
+		}
+	}
+
+	// Fetch from GitHub
+	stats := p.fetchWeekFromGitHub(repo, week, token)
+	if stats == nil {
+		return nil
+	}
+
+	// Cache if not current week
+	if !isCurrentWeek && len(stats.Users) > 0 {
+		if data, err := json.Marshal(stats); err == nil {
+			p.API.KVSet(cacheKey, data)
+		}
+	}
+
+	return stats
+}
+
+// fetchWeekFromGitHub fetches commit stats for a specific week
+func (p *Plugin) fetchWeekFromGitHub(repo, week, token string) *WeeklyRepoStats {
+	startDate := weekToDate(week)
+	endDate := startDate.AddDate(0, 0, 7)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	
+	commitsURL := fmt.Sprintf(
+		"https://api.github.com/repos/%s/commits?since=%s&until=%s&per_page=100",
+		repo,
+		startDate.Format(time.RFC3339),
+		endDate.Format(time.RFC3339),
+	)
+
+	req, _ := http.NewRequest("GET", commitsURL, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		p.API.LogWarn("GitHub API error", "repo", repo, "week", week, "error", err.Error())
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil
+	}
+
+	var commits []struct {
+		SHA    string `json:"sha"`
+		Author *struct {
+			Login string `json:"login"`
+		} `json:"author"`
+	}
+	json.NewDecoder(resp.Body).Decode(&commits)
+
+	stats := &WeeklyRepoStats{
+		Week:      week,
+		Repo:      repo,
+		Users:     make(map[string]WeekUserStat),
+		FetchedAt: time.Now().Format(time.RFC3339),
+	}
+
+	// Count commits per user (skip fetching line counts to speed up)
+	for _, c := range commits {
+		if c.Author == nil || c.Author.Login == "" {
+			continue
+		}
+		login := c.Author.Login
+		s := stats.Users[login]
+		s.Commits++
+		stats.Users[login] = s
+	}
+
+	return stats
 }
 
 // weekToDate converts ISO week (2026-W05) to first day of that week
