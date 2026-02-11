@@ -48,6 +48,106 @@
     font-size: 12px;
 }
 
+/* Custom Week Picker */
+.week-picker-container {
+    position: relative;
+}
+
+.week-picker-btn {
+    padding: 6px 10px;
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
+    border-radius: 4px;
+    background: var(--center-channel-bg);
+    color: var(--center-channel-color);
+    font-size: 12px;
+    cursor: pointer;
+    min-width: 90px;
+}
+
+.week-picker-btn:hover {
+    border-color: var(--button-bg);
+}
+
+.week-picker-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: var(--center-channel-bg);
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+    z-index: 1000;
+    padding: 8px;
+    min-width: 240px;
+}
+
+.week-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.week-picker-header button {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    cursor: pointer;
+    color: rgba(var(--center-channel-color-rgb), 0.64);
+    font-size: 12px;
+}
+
+.week-picker-header button:hover {
+    color: var(--button-bg);
+}
+
+.week-picker-days-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(var(--center-channel-color-rgb), 0.56);
+    margin-bottom: 4px;
+}
+
+.week-picker-weeks {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.week-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    padding: 6px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.week-row:hover {
+    background: rgba(var(--button-bg-rgb), 0.08);
+}
+
+.week-row.selected {
+    background: rgba(var(--button-bg-rgb), 0.16);
+    color: var(--button-bg);
+    font-weight: 600;
+}
+
+.week-row .day {
+    padding: 2px;
+}
+
+.week-row .day.other-month {
+    color: rgba(var(--center-channel-color-rgb), 0.32);
+}
+
 /* Filters Divider */
 .filters-divider {
     display: flex;

@@ -21,47 +21,153 @@ interface StatsResponse {
     last_updated: string;
 }
 
+// Get ISO week number from date
+const getISOWeek = (date: Date): { year: number; week: number } => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return { year: d.getUTCFullYear(), week };
+};
+
+// Format as ISO week string
+const formatISOWeek = (year: number, week: number): string => {
+    return `${year}-W${week.toString().padStart(2, '0')}`;
+};
+
 // Get current ISO week
 const getCurrentWeek = (): string => {
-    const now = new Date();
-    const oneJan = new Date(now.getFullYear(), 0, 1);
-    const days = Math.floor((now.getTime() - oneJan.getTime()) / 86400000);
-    const week = Math.ceil((days + oneJan.getDay() + 1) / 7);
-    return `${now.getFullYear()}-W${week.toString().padStart(2, '0')}`;
+    const { year, week } = getISOWeek(new Date());
+    return formatISOWeek(year, week);
 };
 
 // Get week from N weeks ago
 const getWeekAgo = (weeksAgo: number): string => {
-    const now = new Date();
-    now.setDate(now.getDate() - weeksAgo * 7);
-    const oneJan = new Date(now.getFullYear(), 0, 1);
-    const days = Math.floor((now.getTime() - oneJan.getTime()) / 86400000);
-    const week = Math.ceil((days + oneJan.getDay() + 1) / 7);
-    return `${now.getFullYear()}-W${week.toString().padStart(2, '0')}`;
+    const d = new Date();
+    d.setDate(d.getDate() - weeksAgo * 7);
+    const { year, week } = getISOWeek(d);
+    return formatISOWeek(year, week);
 };
 
-// Parse ISO week to Date
+// Parse ISO week to Monday of that week
 const weekToDate = (isoWeek: string): Date => {
-    const [year, weekStr] = isoWeek.split('-W');
-    const week = parseInt(weekStr, 10);
-    const simple = new Date(parseInt(year, 10), 0, 1 + (week - 1) * 7);
-    const dow = simple.getDay();
-    const isoWeekStart = simple;
-    if (dow <= 4) {
-        isoWeekStart.setDate(simple.getDate() - simple.getDay() + 1);
-    } else {
-        isoWeekStart.setDate(simple.getDate() + 8 - simple.getDay());
-    }
-    return isoWeekStart;
+    const match = isoWeek.match(/(\d{4})-W(\d{2})/);
+    if (!match) return new Date();
+    const year = parseInt(match[1], 10);
+    const week = parseInt(match[2], 10);
+    
+    // Find Jan 4 of the year (always in week 1)
+    const jan4 = new Date(year, 0, 4);
+    // Find Monday of week 1
+    const dayOfWeek = jan4.getDay() || 7;
+    const week1Monday = new Date(jan4);
+    week1Monday.setDate(jan4.getDate() - dayOfWeek + 1);
+    // Add weeks
+    const result = new Date(week1Monday);
+    result.setDate(week1Monday.getDate() + (week - 1) * 7);
+    return result;
 };
 
-// Format date for display
-const formatWeekRange = (isoWeek: string): string => {
-    const start = weekToDate(isoWeek);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}`;
+// Get all weeks for a month (for calendar)
+const getWeeksInMonth = (year: number, month: number): { week: string; days: Date[] }[] => {
+    const weeks: { week: string; days: Date[] }[] = [];
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    
+    // Find Monday of the week containing first day
+    let current = new Date(firstDay);
+    const dow = current.getDay() || 7;
+    current.setDate(current.getDate() - dow + 1);
+    
+    while (current <= lastDay || current.getMonth() === month) {
+        const days: Date[] = [];
+        const weekStart = new Date(current);
+        for (let i = 0; i < 7; i++) {
+            days.push(new Date(current));
+            current.setDate(current.getDate() + 1);
+        }
+        const { year: wy, week: wn } = getISOWeek(weekStart);
+        weeks.push({ week: formatISOWeek(wy, wn), days });
+        
+        if (current.getMonth() > month && current.getDate() > 7) break;
+        if (weeks.length > 6) break;
+    }
+    return weeks;
+};
+
+// Week Picker Component
+interface WeekPickerProps {
+    value: string;
+    onChange: (week: string) => void;
+}
+
+const WeekPicker: React.FC<WeekPickerProps> = ({ value, onChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [viewDate, setViewDate] = useState(() => {
+        const d = weekToDate(value);
+        return { year: d.getFullYear(), month: d.getMonth() };
+    });
+
+    const weeks = getWeeksInMonth(viewDate.year, viewDate.month);
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    const prevMonth = () => {
+        setViewDate(prev => {
+            const m = prev.month - 1;
+            return m < 0 ? { year: prev.year - 1, month: 11 } : { year: prev.year, month: m };
+        });
+    };
+
+    const nextMonth = () => {
+        setViewDate(prev => {
+            const m = prev.month + 1;
+            return m > 11 ? { year: prev.year + 1, month: 0 } : { year: prev.year, month: m };
+        });
+    };
+
+    const selectWeek = (week: string) => {
+        onChange(week);
+        setIsOpen(false);
+    };
+
+    return (
+        <div className="week-picker-container">
+            <button className="week-picker-btn" onClick={() => setIsOpen(!isOpen)}>
+                {value}
+            </button>
+            {isOpen && (
+                <div className="week-picker-dropdown">
+                    <div className="week-picker-header">
+                        <button onClick={prevMonth}>◀</button>
+                        <span>{monthNames[viewDate.month]} {viewDate.year}</span>
+                        <button onClick={nextMonth}>▶</button>
+                    </div>
+                    <div className="week-picker-days-header">
+                        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                    </div>
+                    <div className="week-picker-weeks">
+                        {weeks.map(({ week, days }) => (
+                            <div 
+                                key={week}
+                                className={`week-row ${week === value ? 'selected' : ''}`}
+                                onClick={() => selectWeek(week)}
+                            >
+                                {days.map((day, i) => (
+                                    <span 
+                                        key={i} 
+                                        className={`day ${day.getMonth() !== viewDate.month ? 'other-month' : ''}`}
+                                    >
+                                        {day.getDate()}
+                                    </span>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 const GitHubReportsRHS: React.FC = () => {
@@ -155,19 +261,9 @@ const GitHubReportsRHS: React.FC = () => {
             <div className="date-range-row">
                 <label>Date range</label>
                 <div className="date-inputs">
-                    <input
-                        type="week"
-                        value={weekStart}
-                        onChange={(e) => setWeekStart(e.target.value)}
-                        className="week-input"
-                    />
+                    <WeekPicker value={weekStart} onChange={setWeekStart} />
                     <span className="date-separator">→</span>
-                    <input
-                        type="week"
-                        value={weekEnd}
-                        onChange={(e) => setWeekEnd(e.target.value)}
-                        className="week-input"
-                    />
+                    <WeekPicker value={weekEnd} onChange={setWeekEnd} />
                 </div>
             </div>
 
