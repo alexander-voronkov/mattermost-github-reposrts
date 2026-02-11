@@ -342,14 +342,51 @@ func (p *Plugin) fetchWeekFromGitHub(repo, week, token string) *WeeklyRepoStats 
 		FetchedAt: time.Now().Format(time.RFC3339),
 	}
 
-	// Count commits per user (skip fetching line counts to speed up)
+	// First pass: count commits per user
+	userCommitSHAs := make(map[string][]string)
 	for _, c := range commits {
 		if c.Author == nil || c.Author.Login == "" {
 			continue
 		}
 		login := c.Author.Login
-		s := stats.Users[login]
-		s.Commits++
+		userCommitSHAs[login] = append(userCommitSHAs[login], c.SHA)
+	}
+
+	// Second pass: fetch line counts for each commit (limit to avoid rate limit)
+	totalFetched := 0
+	maxDetailFetches := 50 // Limit detail fetches per week
+
+	for login, shas := range userCommitSHAs {
+		s := WeekUserStat{Commits: len(shas)}
+		
+		for _, sha := range shas {
+			if totalFetched >= maxDetailFetches {
+				break
+			}
+			
+			detailURL := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, sha)
+			detailReq, _ := http.NewRequest("GET", detailURL, nil)
+			detailReq.Header.Set("Authorization", "Bearer "+token)
+			detailReq.Header.Set("Accept", "application/vnd.github+json")
+
+			detailResp, err := client.Do(detailReq)
+			if err == nil && detailResp.StatusCode == 200 {
+				var detail struct {
+					Stats struct {
+						Additions int `json:"additions"`
+						Deletions int `json:"deletions"`
+					} `json:"stats"`
+				}
+				json.NewDecoder(detailResp.Body).Decode(&detail)
+				s.Added += detail.Stats.Additions
+				s.Removed += detail.Stats.Deletions
+				totalFetched++
+			}
+			if detailResp != nil {
+				detailResp.Body.Close()
+			}
+		}
+		
 		stats.Users[login] = s
 	}
 
