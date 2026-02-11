@@ -502,8 +502,35 @@ func (p *Plugin) handleGetContributorsWithCommits(w http.ResponseWriter, r *http
 			shortRepo = repo[idx+1:]
 		}
 
+		// Check if repo is a fork and get creation date
+		var sinceDate string
+		repoInfoURL := fmt.Sprintf("https://api.github.com/repos/%s", repo)
+		repoReq, _ := http.NewRequest("GET", repoInfoURL, nil)
+		repoReq.Header.Set("Authorization", "Bearer "+config.GitHubToken)
+		repoReq.Header.Set("Accept", "application/vnd.github+json")
+
+		repoResp, repoErr := client.Do(repoReq)
+		if repoErr == nil && repoResp.StatusCode == 200 {
+			var repoInfo struct {
+				Fork      bool   `json:"fork"`
+				CreatedAt string `json:"created_at"`
+			}
+			json.NewDecoder(repoResp.Body).Decode(&repoInfo)
+			repoResp.Body.Close()
+
+			if repoInfo.Fork && repoInfo.CreatedAt != "" {
+				// Use fork creation date to filter commits
+				sinceDate = repoInfo.CreatedAt
+			}
+		} else if repoResp != nil {
+			repoResp.Body.Close()
+		}
+
 		// Get recent commits for this repo (100 commits should cover most contributors)
 		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?per_page=100", repo)
+		if sinceDate != "" {
+			commitsURL += "&since=" + sinceDate
+		}
 		req, _ := http.NewRequest("GET", commitsURL, nil)
 		req.Header.Set("Authorization", "Bearer "+config.GitHubToken)
 		req.Header.Set("Accept", "application/vnd.github+json")
