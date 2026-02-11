@@ -175,3 +175,12 @@
     font-style: italic;
     padding: 8px 0;
 }
+
+.dropdown-item-custom {
+    border-bottom: 1px solid rgba(var(--center-channel-color-rgb), 0.08);
+    background: rgba(var(--button-bg-rgb), 0.04);
+}
+
+.custom-entry-icon {
+    font-size: 14px;
+}

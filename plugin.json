@@ -18,8 +18,8 @@
         "bundle_path": "webapp/dist/main.js"
     },
     "settings_schema": {
-        "header": "GitHub Activity Reports - View team activity across repositories",
-        "footer": "Configure GitHub token and user mappings below.",
+        "header": "",
+        "footer": "",
         "settings": [
             {
                 "key": "github_token",
@@ -32,10 +32,9 @@
             },
             {
                 "key": "repositories",
-                "display_name": "Repositories (comma-separated)",
-                "type": "text",
-                "help_text": "List of repositories to track (e.g., org/repo1, org/repo2)",
-                "placeholder": "fambear/fambear, fambear/front, fambear/mobile",
+                "display_name": "Repositories",
+                "type": "custom",
+                "help_text": "Add repositories to track. Type org/repo and press Enter.",
                 "default": ""
             },
             {

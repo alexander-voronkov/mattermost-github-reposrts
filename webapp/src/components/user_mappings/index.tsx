@@ -60,13 +60,13 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
             setLoading(true);
             try {
                 const [ghRes, mmRes] = await Promise.all([
-                    fetch(`/plugins/${PLUGIN_ID}/api/v1/github/contributors`),
+                    fetch(`/plugins/${PLUGIN_ID}/api/v1/github/all-contributors`),
                     fetch(`/plugins/${PLUGIN_ID}/api/v1/mattermost/users`),
                 ]);
 
                 if (ghRes.ok) {
                     const ghData = await ghRes.json();
-                    setGithubUsers(ghData);
+                    setGithubUsers(Array.isArray(ghData) ? ghData : []);
                 }
 
                 if (mmRes.ok) {
@@ -178,16 +178,33 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
                     <div className="mapping-dropdown">
                         <input
                             type="text"
-                            placeholder="Search GitHub user..."
+                            placeholder="GitHub username..."
                             value={searchGH}
                             onChange={(e) => {
                                 setSearchGH(e.target.value);
                                 setActiveDropdown('gh');
                             }}
                             onFocus={() => setActiveDropdown('gh')}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Tab' && searchGH.trim()) {
+                                    setActiveDropdown('mm');
+                                }
+                            }}
                         />
-                        {activeDropdown === 'gh' && filteredGHUsers.length > 0 && (
+                        {activeDropdown === 'gh' && searchGH && (
                             <div className="dropdown-list">
+                                {/* Option to use the typed value directly */}
+                                {searchGH.trim() && !filteredGHUsers.some(u => u.login.toLowerCase() === searchGH.toLowerCase()) && (
+                                    <div
+                                        className="dropdown-item dropdown-item-custom"
+                                        onClick={() => {
+                                            setActiveDropdown('mm');
+                                        }}
+                                    >
+                                        <span className="custom-entry-icon">✏️</span>
+                                        <span>Use "{searchGH}"</span>
+                                    </div>
+                                )}
                                 {filteredGHUsers.slice(0, 10).map(user => (
                                     <div
                                         key={user.login}

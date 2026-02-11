@@ -50,6 +50,10 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 		} else {
 			p.handleGetMappings(w, r)
 		}
+	case "/api/v1/github/repo/validate":
+		p.handleValidateRepo(w, r)
+	case "/api/v1/github/all-contributors":
+		p.handleGetAllContributors(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -129,6 +133,168 @@ type GitHubContributor struct {
 	AvatarURL string `json:"avatar_url"`
 	Name      string `json:"name"`
 	Email     string `json:"email"`
+}
+
+// GitHubRepo represents repository info
+type GitHubRepo struct {
+	Name     string `json:"name"`
+	FullName string `json:"full_name"`
+	Private  bool   `json:"private"`
+}
+
+// handleValidateRepo validates a single repository
+func (p *Plugin) handleValidateRepo(w http.ResponseWriter, r *http.Request) {
+	config := p.getConfiguration()
+	if config.GitHubToken == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "GitHub token not configured",
+		})
+		return
+	}
+
+	repo := r.URL.Query().Get("repo")
+	if repo == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "repo parameter required",
+		})
+		return
+	}
+
+	client := &http.Client{}
+	url := fmt.Sprintf("https://api.github.com/repos/%s", repo)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+config.GitHubToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Failed to connect to GitHub",
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 404 {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Repository not found",
+		})
+		return
+	}
+
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "No access to repository",
+		})
+		return
+	}
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": fmt.Sprintf("GitHub API error: %s", string(body)),
+		})
+		return
+	}
+
+	var repoInfo GitHubRepo
+	if err := json.NewDecoder(resp.Body).Decode(&repoInfo); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Failed to parse response",
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"name":    repoInfo.FullName,
+		"private": repoInfo.Private,
+	})
+}
+
+// handleGetAllContributors fetches all contributors from repos + org members
+func (p *Plugin) handleGetAllContributors(w http.ResponseWriter, r *http.Request) {
+	config := p.getConfiguration()
+	if config.GitHubToken == "" {
+		http.Error(w, `{"error": "GitHub token not configured"}`, http.StatusBadRequest)
+		return
+	}
+
+	client := &http.Client{}
+	contributorsMap := make(map[string]GitHubContributor)
+
+	// Get contributors from repositories
+	repos := strings.Split(config.Repositories, ",")
+	for _, repo := range repos {
+		repo = strings.TrimSpace(repo)
+		if repo == "" {
+			continue
+		}
+
+		// Get contributors
+		url := fmt.Sprintf("https://api.github.com/repos/%s/contributors?per_page=100", repo)
+		req, _ := http.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+config.GitHubToken)
+		req.Header.Set("Accept", "application/vnd.github+json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode == 200 {
+			var contributors []GitHubContributor
+			json.NewDecoder(resp.Body).Decode(&contributors)
+			for _, c := range contributors {
+				if c.Login != "" {
+					contributorsMap[c.Login] = c
+				}
+			}
+		}
+		resp.Body.Close()
+	}
+
+	// Try to get org members if repo has org prefix
+	orgsChecked := make(map[string]bool)
+	for _, repo := range repos {
+		repo = strings.TrimSpace(repo)
+		parts := strings.Split(repo, "/")
+		if len(parts) >= 1 {
+			org := parts[0]
+			if orgsChecked[org] {
+				continue
+			}
+			orgsChecked[org] = true
+
+			url := fmt.Sprintf("https://api.github.com/orgs/%s/members?per_page=100", org)
+			req, _ := http.NewRequest("GET", url, nil)
+			req.Header.Set("Authorization", "Bearer "+config.GitHubToken)
+			req.Header.Set("Accept", "application/vnd.github+json")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				continue
+			}
+
+			if resp.StatusCode == 200 {
+				var members []GitHubContributor
+				json.NewDecoder(resp.Body).Decode(&members)
+				for _, m := range members {
+					if m.Login != "" {
+						contributorsMap[m.Login] = m
+					}
+				}
+			}
+			resp.Body.Close()
+		}
+	}
+
+	// Convert to slice
+	result := make([]GitHubContributor, 0, len(contributorsMap))
+	for _, c := range contributorsMap {
+		result = append(result, c)
+	}
+
+	json.NewEncoder(w).Encode(result)
 }
 
 // handleGetGitHubContributors fetches contributors from configured repositories

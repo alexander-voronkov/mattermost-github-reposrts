@@ -1,0 +1,128 @@
+.repositories-input-container {
+    padding: 10px 0;
+}
+
+.repositories-label {
+    display: block;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.repositories-help {
+    font-size: 12px;
+    color: rgba(var(--center-channel-color-rgb), 0.64);
+    margin-bottom: 12px;
+}
+
+.repositories-input-wrapper {
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
+    border-radius: 4px;
+    padding: 6px 8px;
+    background: var(--center-channel-bg);
+    min-height: 42px;
+}
+
+.repositories-input-wrapper:focus-within {
+    border-color: var(--button-bg);
+    box-shadow: 0 0 0 2px rgba(var(--button-bg-rgb), 0.16);
+}
+
+.repos-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.repo-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 16px;
+    font-size: 13px;
+    background: rgba(var(--center-channel-color-rgb), 0.08);
+    border: 1px solid transparent;
+}
+
+.repo-tag.valid {
+    background: rgba(61, 184, 135, 0.12);
+    border-color: rgba(61, 184, 135, 0.3);
+}
+
+.repo-tag.private {
+    background: rgba(56, 111, 229, 0.12);
+    border-color: rgba(56, 111, 229, 0.3);
+}
+
+.repo-tag.error {
+    background: rgba(210, 75, 78, 0.12);
+    border-color: rgba(210, 75, 78, 0.3);
+}
+
+.repo-tag.validating {
+    background: rgba(var(--center-channel-color-rgb), 0.08);
+}
+
+.repo-icon {
+    font-size: 12px;
+}
+
+.repo-icon.valid {
+    color: #3DB887;
+}
+
+.repo-icon.private {
+    color: #386FE5;
+}
+
+.repo-icon.error {
+    color: #D24B4E;
+}
+
+.repo-icon.validating {
+    animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.repo-name {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.repo-remove {
+    background: none;
+    border: none;
+    padding: 0 2px;
+    margin-left: 2px;
+    cursor: pointer;
+    color: rgba(var(--center-channel-color-rgb), 0.56);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.repo-remove:hover {
+    color: #D24B4E;
+}
+
+.repo-input {
+    flex: 1;
+    min-width: 120px;
+    border: none;
+    background: transparent;
+    padding: 4px;
+    font-size: 14px;
+    color: var(--center-channel-color);
+    outline: none;
+}
+
+.repo-input::placeholder {
+    color: rgba(var(--center-channel-color-rgb), 0.48);
+}
