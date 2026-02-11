@@ -1,0 +1,59 @@
+{
+    "id": "com.fambear.github-reports",
+    "name": "GitHub Activity Reports",
+    "description": "View team GitHub activity in the right-hand sidebar with charts and filters",
+    "homepage_url": "https://github.com/alexander-voronkov/mattermost-github-reposrts",
+    "support_url": "https://github.com/alexander-voronkov/mattermost-github-reposrts/issues",
+    "version": "0.1.0",
+    "min_server_version": "9.0.0",
+    "server": {
+        "executables": {
+            "linux-amd64": "plugin-linux-amd64",
+            "darwin-amd64": "plugin-darwin-amd64",
+            "darwin-arm64": "plugin-darwin-arm64",
+            "windows-amd64": "plugin-windows-amd64.exe"
+        }
+    },
+    "webapp": {
+        "bundle_path": "webapp/dist/main.js"
+    },
+    "settings_schema": {
+        "header": "GitHub Activity Reports - View team activity across repositories",
+        "footer": "Configure GitHub token and user mappings below.",
+        "settings": [
+            {
+                "key": "github_token",
+                "display_name": "GitHub Personal Access Token",
+                "type": "text",
+                "help_text": "Token with repo read access for fetching commit data",
+                "placeholder": "ghp_xxxxxxxxxxxx",
+                "default": "",
+                "secret": true
+            },
+            {
+                "key": "github_org",
+                "display_name": "GitHub Organization",
+                "type": "text",
+                "help_text": "GitHub organization name to fetch repositories from",
+                "placeholder": "fambear",
+                "default": ""
+            },
+            {
+                "key": "repositories",
+                "display_name": "Repositories (comma-separated)",
+                "type": "text",
+                "help_text": "List of repositories to track (e.g., org/repo1, org/repo2)",
+                "placeholder": "fambear/fambear, fambear/front, fambear/mobile",
+                "default": ""
+            },
+            {
+                "key": "user_mappings",
+                "display_name": "User Mappings (JSON)",
+                "type": "longtext",
+                "help_text": "Map GitHub emails to Mattermost usernames. Format: {\"github@email.com\": \"mm_username\", ...}",
+                "placeholder": "{\"user@github.com\": \"mmuser\"}",
+                "default": "{}"
+            }
+        ]
+    }
+}

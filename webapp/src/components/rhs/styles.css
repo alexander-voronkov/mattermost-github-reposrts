@@ -1,0 +1,217 @@
+.github-reports-rhs {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 16px;
+    background: var(--center-channel-bg, #0d1117);
+    color: var(--center-channel-color, #c9d1d9);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-y: auto;
+}
+
+.rhs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.rhs-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--button-bg, #58a6ff);
+}
+
+.date-range {
+    font-size: 12px;
+    color: var(--center-channel-color, #8b949e);
+    opacity: 0.7;
+}
+
+.filters-section {
+    margin-bottom: 16px;
+}
+
+.filter-group {
+    margin-bottom: 12px;
+}
+
+.filter-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--center-channel-color, #8b949e);
+    opacity: 0.7;
+    margin-bottom: 8px;
+}
+
+.user-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.user-pill {
+    background: rgba(128, 128, 128, 0.15);
+    border: 1px solid rgba(128, 128, 128, 0.3);
+    border-radius: 16px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--center-channel-color, #c9d1d9);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.user-pill:hover {
+    border-color: var(--button-bg, #58a6ff);
+}
+
+.user-pill.active {
+    background: var(--button-bg, #238636);
+    border-color: var(--button-bg, #238636);
+    color: white;
+}
+
+.date-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.date-inputs input {
+    background: rgba(128, 128, 128, 0.1);
+    border: 1px solid rgba(128, 128, 128, 0.3);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--center-channel-color, #c9d1d9);
+    width: 90px;
+}
+
+.date-inputs input:focus {
+    outline: none;
+    border-color: var(--button-bg, #58a6ff);
+}
+
+.date-inputs span {
+    color: var(--center-channel-color, #8b949e);
+    opacity: 0.5;
+}
+
+.stats-overview {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.stat-card {
+    background: rgba(128, 128, 128, 0.1);
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--button-bg, #58a6ff);
+}
+
+.stat-value.green {
+    color: #3fb950;
+}
+
+.stat-value.red {
+    color: #f85149;
+}
+
+.stat-label {
+    font-size: 10px;
+    color: var(--center-channel-color, #8b949e);
+    opacity: 0.7;
+    margin-top: 4px;
+    text-transform: uppercase;
+}
+
+.user-breakdown {
+    flex: 1;
+}
+
+.user-breakdown h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--center-channel-color, #8b949e);
+    margin: 0 0 12px;
+    text-transform: uppercase;
+    opacity: 0.7;
+}
+
+.user-row {
+    background: rgba(128, 128, 128, 0.08);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.user-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.user-name {
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.user-commits {
+    font-size: 11px;
+    color: var(--center-channel-color, #8b949e);
+    opacity: 0.7;
+}
+
+.user-lines {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    margin-bottom: 6px;
+}
+
+.user-lines .added {
+    color: #3fb950;
+}
+
+.user-lines .removed {
+    color: #f85149;
+}
+
+.commit-bar {
+    height: 4px;
+    background: rgba(128, 128, 128, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #238636, #3fb950);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.rhs-footer {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid rgba(128, 128, 128, 0.2);
+    font-size: 10px;
+    color: var(--center-channel-color, #8b949e);
+    opacity: 0.5;
+    text-align: center;
+}
