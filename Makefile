@@ -28,7 +28,8 @@ dist: clean server webapp
 	tar -czf dist/github-reports-$(PLUGIN_VERSION).tar.gz \
 		plugin.json \
 		plugin-linux-amd64 \
-		webapp/
+		webapp/dist/main.js
+	@echo "Distribution created: dist/github-reports-$(PLUGIN_VERSION).tar.gz"
 
 dist-linux: clean
 	@echo "Building distribution for Linux AMD64..."
@@ -38,5 +39,5 @@ dist-linux: clean
 	tar -czf dist/github-reports-$(PLUGIN_VERSION).tar.gz \
 		plugin.json \
 		plugin-linux-amd64 \
-		webapp/
+		webapp/dist/main.js
 	@echo "Distribution created: dist/github-reports-$(PLUGIN_VERSION).tar.gz"
