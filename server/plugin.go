@@ -479,6 +479,7 @@ type ContributorWithCommits struct {
 }
 
 // handleGetContributorsWithCommits fetches all contributors with their last 3 commits per repo
+// Optimized: fetches recent commits per repo and groups by author (fewer API calls)
 func (p *Plugin) handleGetContributorsWithCommits(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
 	if config.GitHubToken == "" {
@@ -496,9 +497,14 @@ func (p *Plugin) handleGetContributorsWithCommits(w http.ResponseWriter, r *http
 			continue
 		}
 
-		// Get contributors for this repo
-		contribURL := fmt.Sprintf("https://api.github.com/repos/%s/contributors?per_page=100", repo)
-		req, _ := http.NewRequest("GET", contribURL, nil)
+		shortRepo := repo
+		if idx := strings.Index(repo, "/"); idx >= 0 {
+			shortRepo = repo[idx+1:]
+		}
+
+		// Get recent commits for this repo (100 commits should cover most contributors)
+		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?per_page=100", repo)
+		req, _ := http.NewRequest("GET", commitsURL, nil)
 		req.Header.Set("Authorization", "Bearer "+config.GitHubToken)
 		req.Header.Set("Accept", "application/vnd.github+json")
 
@@ -510,85 +516,86 @@ func (p *Plugin) handleGetContributorsWithCommits(w http.ResponseWriter, r *http
 			continue
 		}
 
-		var contributors []struct {
-			Login     string `json:"login"`
-			AvatarURL string `json:"avatar_url"`
+		var commits []struct {
+			SHA    string `json:"sha"`
+			Commit struct {
+				Message string `json:"message"`
+				Author  struct {
+					Date string `json:"date"`
+				} `json:"author"`
+			} `json:"commit"`
+			Author *struct {
+				Login     string `json:"login"`
+				AvatarURL string `json:"avatar_url"`
+			} `json:"author"`
 		}
-		json.NewDecoder(resp.Body).Decode(&contributors)
+		json.NewDecoder(resp.Body).Decode(&commits)
 		resp.Body.Close()
 
-		// For each contributor, get their last 3 commits in this repo
-		for _, contrib := range contributors {
-			if contrib.Login == "" {
+		// Group commits by author
+		authorCommits := make(map[string][]ContributorCommit)
+		authorInfo := make(map[string]struct {
+			Login     string
+			AvatarURL string
+		})
+
+		for _, c := range commits {
+			if c.Author == nil || c.Author.Login == "" {
 				continue
 			}
 
-			// Initialize contributor if not exists
-			if contributorsMap[contrib.Login] == nil {
-				contributorsMap[contrib.Login] = &ContributorWithCommits{
-					Login:     contrib.Login,
-					AvatarURL: contrib.AvatarURL,
+			login := c.Author.Login
+
+			// Store author info
+			if _, exists := authorInfo[login]; !exists {
+				authorInfo[login] = struct {
+					Login     string
+					AvatarURL string
+				}{c.Author.Login, c.Author.AvatarURL}
+			}
+
+			// Only keep first 3 commits per author per repo
+			if len(authorCommits[login]) >= 3 {
+				continue
+			}
+
+			// Truncate message to first line
+			msg := c.Commit.Message
+			if idx := strings.Index(msg, "\n"); idx > 0 {
+				msg = msg[:idx]
+			}
+			if len(msg) > 80 {
+				msg = msg[:77] + "..."
+			}
+
+			date := c.Commit.Author.Date
+			if len(date) >= 10 {
+				date = date[:10]
+			}
+
+			sha := c.SHA
+			if len(sha) > 7 {
+				sha = sha[:7]
+			}
+
+			authorCommits[login] = append(authorCommits[login], ContributorCommit{
+				SHA:     sha,
+				Message: msg,
+				Date:    date,
+			})
+		}
+
+		// Merge into contributorsMap
+		for login, commits := range authorCommits {
+			if contributorsMap[login] == nil {
+				info := authorInfo[login]
+				contributorsMap[login] = &ContributorWithCommits{
+					Login:     info.Login,
+					AvatarURL: info.AvatarURL,
 					Repos:     make(map[string][]ContributorCommit),
 				}
 			}
-
-			// Get commits by this author
-			commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?author=%s&per_page=3", repo, contrib.Login)
-			req, _ := http.NewRequest("GET", commitsURL, nil)
-			req.Header.Set("Authorization", "Bearer "+config.GitHubToken)
-			req.Header.Set("Accept", "application/vnd.github+json")
-
-			resp, err := client.Do(req)
-			if err != nil || resp.StatusCode != 200 {
-				if resp != nil {
-					resp.Body.Close()
-				}
-				continue
-			}
-
-			var commits []struct {
-				SHA    string `json:"sha"`
-				Commit struct {
-					Message string `json:"message"`
-					Author  struct {
-						Date string `json:"date"`
-					} `json:"author"`
-				} `json:"commit"`
-			}
-			json.NewDecoder(resp.Body).Decode(&commits)
-			resp.Body.Close()
-
-			repoCommits := make([]ContributorCommit, 0, len(commits))
-			for _, c := range commits {
-				// Truncate message to first line
-				msg := c.Commit.Message
-				if idx := strings.Index(msg, "\n"); idx > 0 {
-					msg = msg[:idx]
-				}
-				// Truncate long messages
-				if len(msg) > 80 {
-					msg = msg[:77] + "..."
-				}
-				// Format date
-				date := c.Commit.Author.Date
-				if len(date) >= 10 {
-					date = date[:10]
-				}
-				repoCommits = append(repoCommits, ContributorCommit{
-					SHA:     c.SHA[:7],
-					Message: msg,
-					Date:    date,
-				})
-			}
-
-			if len(repoCommits) > 0 {
-				// Use short repo name (without org prefix)
-				shortRepo := repo
-				if idx := strings.Index(repo, "/"); idx >= 0 {
-					shortRepo = repo[idx+1:]
-				}
-				contributorsMap[contrib.Login].Repos[shortRepo] = repoCommits
-			}
+			contributorsMap[login].Repos[shortRepo] = commits
 		}
 	}
 
