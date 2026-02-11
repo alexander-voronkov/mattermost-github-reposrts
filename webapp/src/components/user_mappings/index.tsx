@@ -339,20 +339,19 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
                         <tbody>
                             {contributors
                                 .filter(c => Object.keys(c.repos).length > 0)
+                                .filter(c => !isMapped(c.login))
                                 .map(contrib => (
-                                <tr key={contrib.login} className={isMapped(contrib.login) ? 'mapped' : ''}>
+                                <tr key={contrib.login}>
                                     <td className="contrib-user-cell">
                                         <button
                                             type="button"
                                             className="contrib-user-btn"
                                             onClick={() => selectContributor(contrib.login)}
-                                            disabled={isMapped(contrib.login)}
                                         >
                                             {contrib.avatar_url && (
                                                 <img src={contrib.avatar_url} alt="" className="contrib-avatar" />
                                             )}
                                             <span className="contrib-login">@{contrib.login}</span>
-                                            {isMapped(contrib.login) && <span className="mapped-badge">✓</span>}
                                         </button>
                                     </td>
                                     <td className="contrib-repos-cell">
