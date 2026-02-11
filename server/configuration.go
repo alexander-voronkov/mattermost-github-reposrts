@@ -2,7 +2,6 @@ package main
 
 type configuration struct {
 	GitHubToken  string `json:"github_token"`
-	GitHubOrg    string `json:"github_org"`
 	Repositories string `json:"repositories"`
 	UserMappings string `json:"user_mappings"`
 }

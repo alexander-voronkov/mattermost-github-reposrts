@@ -25,18 +25,10 @@
                 "key": "github_token",
                 "display_name": "GitHub Personal Access Token",
                 "type": "text",
-                "help_text": "Token with repo read access for fetching commit data",
+                "help_text": "Token with repo read access. Token's permissions determine available repositories.",
                 "placeholder": "ghp_xxxxxxxxxxxx",
                 "default": "",
                 "secret": true
-            },
-            {
-                "key": "github_org",
-                "display_name": "GitHub Organization",
-                "type": "text",
-                "help_text": "GitHub organization name to fetch repositories from",
-                "placeholder": "fambear",
-                "default": ""
             },
             {
                 "key": "repositories",
@@ -48,10 +40,9 @@
             },
             {
                 "key": "user_mappings",
-                "display_name": "User Mappings (JSON)",
-                "type": "longtext",
-                "help_text": "Map GitHub emails to Mattermost usernames. Format: {\"github@email.com\": \"mm_username\", ...}",
-                "placeholder": "{\"user@github.com\": \"mmuser\"}",
+                "display_name": "User Mappings",
+                "type": "custom",
+                "help_text": "Map GitHub accounts to Mattermost users. Select GitHub user on the left, Mattermost user on the right.",
                 "default": "{}"
             }
         ]
