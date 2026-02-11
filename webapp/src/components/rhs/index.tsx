@@ -151,31 +151,23 @@ const GitHubReportsRHS: React.FC = () => {
 
     return (
         <div className="github-reports-rhs">
-            <div className="rhs-header">
-                <h3>📊 GitHub Activity</h3>
-            </div>
-
-            {/* Date Range - Week Picker */}
-            <div className="date-range-section">
-                <div className="week-picker">
-                    <label>From</label>
+            {/* Date Range - Single Row */}
+            <div className="date-range-row">
+                <label>Date range</label>
+                <div className="date-inputs">
                     <input
                         type="week"
                         value={weekStart}
                         onChange={(e) => setWeekStart(e.target.value)}
                         className="week-input"
                     />
-                    <span className="week-display">{formatWeekRange(weekStart)}</span>
-                </div>
-                <div className="week-picker">
-                    <label>To</label>
+                    <span className="date-separator">→</span>
                     <input
                         type="week"
                         value={weekEnd}
                         onChange={(e) => setWeekEnd(e.target.value)}
                         className="week-input"
                     />
-                    <span className="week-display">{formatWeekRange(weekEnd)}</span>
                 </div>
             </div>
 
@@ -289,8 +281,8 @@ const GitHubReportsRHS: React.FC = () => {
                     </div>
 
                     <div className="rhs-footer">
-                        <span>Updated: {new Date(stats.last_updated).toLocaleTimeString()}</span>
-                        <button className="refresh-btn" onClick={fetchStats}>↻ Refresh</button>
+                        <span>Last updated: {new Date(stats.last_updated).toLocaleString()}</span>
+                        <button className="refresh-btn" onClick={fetchStats}>↻</button>
                     </div>
                 </>
             )}

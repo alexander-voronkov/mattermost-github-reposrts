@@ -6,44 +6,36 @@
     overflow-y: auto;
 }
 
-.rhs-header {
-    margin-bottom: 16px;
-}
-
-.rhs-header h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-}
-
-/* Date Range Section */
-.date-range-section {
+/* Date Range Row */
+.date-range-row {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 12px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
-.week-picker {
+.date-range-row > label {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(var(--center-channel-color-rgb), 0.72);
+    white-space: nowrap;
+}
+
+.date-inputs {
     display: flex;
     align-items: center;
     gap: 8px;
-}
-
-.week-picker label {
-    width: 40px;
-    font-size: 12px;
-    color: rgba(var(--center-channel-color-rgb), 0.64);
+    flex: 1;
 }
 
 .week-input {
-    padding: 6px 10px;
+    padding: 6px 8px;
     border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
     border-radius: 4px;
     background: var(--center-channel-bg);
     color: var(--center-channel-color);
-    font-size: 13px;
-    width: 140px;
+    font-size: 12px;
+    width: 115px;
 }
 
 .week-input:focus {
@@ -51,9 +43,9 @@
     border-color: var(--button-bg);
 }
 
-.week-display {
+.date-separator {
+    color: rgba(var(--center-channel-color-rgb), 0.48);
     font-size: 12px;
-    color: rgba(var(--center-channel-color-rgb), 0.56);
 }
 
 /* Filters Divider */
