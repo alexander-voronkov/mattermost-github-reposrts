@@ -7,6 +7,18 @@ interface GitHubUser {
     name?: string;
 }
 
+interface ContributorCommit {
+    sha: string;
+    message: string;
+    date: string;
+}
+
+interface ContributorWithCommits {
+    login: string;
+    avatar_url: string;
+    repos: Record<string, ContributorCommit[]>;
+}
+
 interface MMUser {
     id: string;
     username: string;
@@ -40,11 +52,14 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
     const [mappings, setMappings] = useState<Record<string, string>>({});
     const [githubUsers, setGithubUsers] = useState<GitHubUser[]>([]);
     const [mmUsers, setMmUsers] = useState<MMUser[]>([]);
+    const [contributors, setContributors] = useState<ContributorWithCommits[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingContribs, setLoadingContribs] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchGH, setSearchGH] = useState('');
     const [searchMM, setSearchMM] = useState('');
     const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+    const mmInputRef = React.useRef<HTMLInputElement>(null);
 
     // Parse initial value
     useEffect(() => {
@@ -83,6 +98,26 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
         };
 
         fetchData();
+    }, []);
+
+    // Fetch contributors with commits (for reference table)
+    useEffect(() => {
+        const fetchContribs = async () => {
+            setLoadingContribs(true);
+            try {
+                const res = await fetch(`/plugins/${PLUGIN_ID}/api/v1/github/contributors-with-commits`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setContributors(Array.isArray(data) ? data : []);
+                }
+            } catch (err) {
+                // Silently fail - this is just reference data
+            } finally {
+                setLoadingContribs(false);
+            }
+        };
+
+        fetchContribs();
     }, []);
 
     // Update parent when mappings change
@@ -134,6 +169,19 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
         if (user.delete_at && user.delete_at > 0) return '👻';
         return null;
     };
+
+    const selectContributor = (login: string) => {
+        setSearchGH(login);
+        setActiveDropdown('mm');
+        setSearchMM('');
+        // Focus MM input
+        setTimeout(() => {
+            mmInputRef.current?.focus();
+        }, 50);
+    };
+
+    // Check if contributor is already mapped
+    const isMapped = (login: string) => !!mappings[login];
 
     if (loading) {
         return <div className="user-mappings-loading">Loading users...</div>;
@@ -239,6 +287,7 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
 
                     <div className="mapping-dropdown">
                         <input
+                            ref={mmInputRef}
                             type="text"
                             placeholder="Search Mattermost user..."
                             value={searchMM}
@@ -275,10 +324,62 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
                 </div>
             </div>
 
-            {githubUsers.length === 0 && !loading && (
-                <p className="user-mappings-empty">
-                    No GitHub contributors found. Make sure repositories are configured and token has access.
-                </p>
+            {/* Contributors reference table */}
+            {!loadingContribs && contributors.length > 0 && (
+                <div className="contributors-reference">
+                    <h4 className="contributors-title">GitHub Contributors Reference</h4>
+                    <p className="contributors-hint">Click on a username to add mapping</p>
+                    <table className="contributors-table">
+                        <thead>
+                            <tr>
+                                <th>GitHub User</th>
+                                <th>Repositories & Recent Commits</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {contributors
+                                .filter(c => Object.keys(c.repos).length > 0)
+                                .map(contrib => (
+                                <tr key={contrib.login} className={isMapped(contrib.login) ? 'mapped' : ''}>
+                                    <td className="contrib-user-cell">
+                                        <button
+                                            type="button"
+                                            className="contrib-user-btn"
+                                            onClick={() => selectContributor(contrib.login)}
+                                            disabled={isMapped(contrib.login)}
+                                        >
+                                            {contrib.avatar_url && (
+                                                <img src={contrib.avatar_url} alt="" className="contrib-avatar" />
+                                            )}
+                                            <span className="contrib-login">@{contrib.login}</span>
+                                            {isMapped(contrib.login) && <span className="mapped-badge">✓</span>}
+                                        </button>
+                                    </td>
+                                    <td className="contrib-repos-cell">
+                                        {Object.entries(contrib.repos).map(([repoName, commits]) => (
+                                            <div key={repoName} className="contrib-repo">
+                                                <span className="repo-name-badge">{repoName}</span>
+                                                <div className="repo-commits">
+                                                    {commits.map(commit => (
+                                                        <div key={commit.sha} className="commit-line">
+                                                            <span className="commit-date">{commit.date}</span>
+                                                            <span className="commit-sha">{commit.sha}</span>
+                                                            <span className="commit-msg">{commit.message}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {loadingContribs && (
+                <p className="user-mappings-loading">Loading contributors...</p>
             )}
         </div>
     );

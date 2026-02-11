@@ -19,7 +19,7 @@
     },
     "settings_schema": {
         "header": "",
-        "footer": "",
+        "footer": " ",
         "settings": [
             {
                 "key": "github_token",
