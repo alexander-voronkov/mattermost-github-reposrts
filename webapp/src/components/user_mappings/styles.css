@@ -184,3 +184,11 @@
 .custom-entry-icon {
     font-size: 14px;
 }
+
+.dropdown-item.inactive {
+    opacity: 0.6;
+}
+
+.dropdown-item.bot {
+    background: rgba(var(--center-channel-color-rgb), 0.04);
+}

@@ -356,7 +356,7 @@ func (p *Plugin) handleGetGitHubContributors(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(result)
 }
 
-// handleGetMattermostUsers returns all MM users for mapping dropdown
+// handleGetMattermostUsers returns all MM users for mapping dropdown (including inactive and bots)
 func (p *Plugin) handleGetMattermostUsers(w http.ResponseWriter, r *http.Request) {
 	page := 0
 	perPage := 200
@@ -366,7 +366,7 @@ func (p *Plugin) handleGetMattermostUsers(w http.ResponseWriter, r *http.Request
 		users, err := p.API.GetUsers(&model.UserGetOptions{
 			Page:    page,
 			PerPage: perPage,
-			Active:  true,
+			Active:  false, // Include inactive users too
 		})
 		if err != nil {
 			p.API.LogError("Failed to get users", "error", err.Error())
@@ -390,13 +390,13 @@ func (p *Plugin) handleGetMattermostUsers(w http.ResponseWriter, r *http.Request
 		LastName  string `json:"last_name"`
 		Nickname  string `json:"nickname"`
 		Email     string `json:"email"`
+		IsBot     bool   `json:"is_bot"`
+		DeleteAt  int64  `json:"delete_at"`
 	}
 
 	result := make([]MMUser, 0, len(allUsers))
 	for _, u := range allUsers {
-		if u.IsBot {
-			continue
-		}
+		// Include everyone: active, inactive, bots
 		result = append(result, MMUser{
 			ID:        u.Id,
 			Username:  u.Username,
@@ -404,6 +404,8 @@ func (p *Plugin) handleGetMattermostUsers(w http.ResponseWriter, r *http.Request
 			LastName:  u.LastName,
 			Nickname:  u.Nickname,
 			Email:     u.Email,
+			IsBot:     u.IsBot,
+			DeleteAt:  u.DeleteAt,
 		})
 	}
 

@@ -14,6 +14,8 @@ interface MMUser {
     last_name: string;
     nickname: string;
     email: string;
+    is_bot?: boolean;
+    delete_at?: number;
 }
 
 interface UserMappingsProps {
@@ -118,10 +120,19 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
     const getGHUser = (login: string) => githubUsers.find(u => u.login === login);
 
     const getMMDisplayName = (user: MMUser) => {
+        let name = '';
         if (user.first_name || user.last_name) {
-            return `${user.first_name} ${user.last_name}`.trim();
+            name = `${user.first_name} ${user.last_name}`.trim();
+        } else {
+            name = user.nickname || user.username;
         }
-        return user.nickname || user.username;
+        return name;
+    };
+
+    const getMMUserBadge = (user: MMUser) => {
+        if (user.is_bot) return '🤖';
+        if (user.delete_at && user.delete_at > 0) return '👻';
+        return null;
     };
 
     if (loading) {
@@ -156,7 +167,7 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
                                     className="user-avatar-small" 
                                 />
                                 <span className="user-name">
-                                    {mmUser ? getMMDisplayName(mmUser) : mmId}
+                                    {mmUser && getMMUserBadge(mmUser)} {mmUser ? getMMDisplayName(mmUser) : mmId}
                                 </span>
                                 <span className="user-username">@{mmUser?.username}</span>
                             </div>
@@ -239,10 +250,10 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
                         />
                         {activeDropdown === 'mm' && filteredMMUsers.length > 0 && searchGH && (
                             <div className="dropdown-list">
-                                {filteredMMUsers.slice(0, 10).map(user => (
+                                {filteredMMUsers.slice(0, 15).map(user => (
                                     <div
                                         key={user.id}
-                                        className="dropdown-item"
+                                        className={`dropdown-item ${user.delete_at ? 'inactive' : ''} ${user.is_bot ? 'bot' : ''}`}
                                         onClick={() => {
                                             addMapping(searchGH, user.id);
                                         }}
@@ -252,7 +263,9 @@ export const UserMappingsComponent: React.FC<UserMappingsProps> = ({
                                             alt="" 
                                             className="user-avatar-tiny" 
                                         />
-                                        <span className="dropdown-user-name">{getMMDisplayName(user)}</span>
+                                        <span className="dropdown-user-name">
+                                            {getMMUserBadge(user)} {getMMDisplayName(user)}
+                                        </span>
                                         <span className="dropdown-user-username">@{user.username}</span>
                                     </div>
                                 ))}
