@@ -1,192 +1,299 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import './styles.css';
 
-// Sample data structure - will be replaced with API calls
-const sampleData: Record<string, UserData> = {
-    "alfred361@gmail.com": {
-        name: "Alexander V.",
-        total: {commits: 494, added: 33837, removed: 13099},
-        weekly: {
-            "2026-W01": {commits: 6, added: 279, removed: 102},
-            "2026-W02": {commits: 14, added: 2855, removed: 97},
-            "2026-W03": {commits: 1, added: 6, removed: 6},
-            "2026-W04": {commits: 68, added: 8640, removed: 2035},
-            "2026-W05": {commits: 71, added: 4745, removed: 3293},
-            "2026-W06": {commits: 21, added: 23, removed: 23},
-            "2026-W07": {commits: 20, added: 3837, removed: 253},
-        }
-    },
-    "alexey.sogoyan": {
-        name: "Alexey Sogoyan",
-        total: {commits: 562, added: 94386, removed: 15252},
-        weekly: {
-            "2026-W02": {commits: 17, added: 869, removed: 253},
-            "2026-W03": {commits: 8, added: 325, removed: 32},
-            "2026-W04": {commits: 14, added: 491, removed: 109},
-            "2026-W05": {commits: 13, added: 516, removed: 422},
-            "2026-W06": {commits: 24, added: 1021, removed: 186},
-            "2026-W07": {commits: 6, added: 195, removed: 48},
-        }
-    },
-    "vgzulus@gmail.com": {
-        name: "Vlad G.",
-        total: {commits: 284, added: 128341, removed: 18936},
-        weekly: {
-            "2026-W01": {commits: 8, added: 218, removed: 49},
-            "2026-W02": {commits: 11, added: 316, removed: 71},
-            "2026-W03": {commits: 6, added: 209, removed: 70},
-            "2026-W04": {commits: 10, added: 1140, removed: 303},
-            "2026-W05": {commits: 19, added: 6168, removed: 1392},
-            "2026-W06": {commits: 17, added: 1101, removed: 208},
-            "2026-W07": {commits: 10, added: 449, removed: 47},
-        }
-    },
-};
+const PLUGIN_ID = 'com.fambear.github-reports';
 
-interface WeeklyStats {
+interface UserStats {
+    mm_user_id: string;
+    mm_username: string;
+    name: string;
     commits: number;
     added: number;
     removed: number;
+    by_repo: Record<string, number>;
 }
 
-interface UserData {
-    name: string;
-    total: {commits: number; added: number; removed: number};
-    weekly: Record<string, WeeklyStats>;
+interface StatsResponse {
+    users: UserStats[];
+    repos: string[];
+    week_start: string;
+    week_end: string;
+    last_updated: string;
 }
 
-interface DateRange {
-    start: string;
-    end: string;
-}
+// Get current ISO week
+const getCurrentWeek = (): string => {
+    const now = new Date();
+    const oneJan = new Date(now.getFullYear(), 0, 1);
+    const days = Math.floor((now.getTime() - oneJan.getTime()) / 86400000);
+    const week = Math.ceil((days + oneJan.getDay() + 1) / 7);
+    return `${now.getFullYear()}-W${week.toString().padStart(2, '0')}`;
+};
+
+// Get week from N weeks ago
+const getWeekAgo = (weeksAgo: number): string => {
+    const now = new Date();
+    now.setDate(now.getDate() - weeksAgo * 7);
+    const oneJan = new Date(now.getFullYear(), 0, 1);
+    const days = Math.floor((now.getTime() - oneJan.getTime()) / 86400000);
+    const week = Math.ceil((days + oneJan.getDay() + 1) / 7);
+    return `${now.getFullYear()}-W${week.toString().padStart(2, '0')}`;
+};
+
+// Parse ISO week to Date
+const weekToDate = (isoWeek: string): Date => {
+    const [year, weekStr] = isoWeek.split('-W');
+    const week = parseInt(weekStr, 10);
+    const simple = new Date(parseInt(year, 10), 0, 1 + (week - 1) * 7);
+    const dow = simple.getDay();
+    const isoWeekStart = simple;
+    if (dow <= 4) {
+        isoWeekStart.setDate(simple.getDate() - simple.getDay() + 1);
+    } else {
+        isoWeekStart.setDate(simple.getDate() + 8 - simple.getDay());
+    }
+    return isoWeekStart;
+};
+
+// Format date for display
+const formatWeekRange = (isoWeek: string): string => {
+    const start = weekToDate(isoWeek);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+    return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}`;
+};
 
 const GitHubReportsRHS: React.FC = () => {
-    const [users, setUsers] = useState<string[]>(Object.keys(sampleData));
-    const [selectedUsers, setSelectedUsers] = useState<string[]>(Object.keys(sampleData));
-    const [dateRange, setDateRange] = useState<DateRange>({start: '2026-W01', end: '2026-W07'});
-    const [data, setData] = useState<Record<string, UserData>>(sampleData);
+    const [weekStart, setWeekStart] = useState(getWeekAgo(4));
+    const [weekEnd, setWeekEnd] = useState(getCurrentWeek());
+    const [showFilters, setShowFilters] = useState(false);
+    const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+    const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
+    const [stats, setStats] = useState<StatsResponse | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    const toggleUser = (email: string) => {
-        setSelectedUsers(prev => 
-            prev.includes(email) 
-                ? prev.filter(u => u !== email)
-                : [...prev, email]
-        );
+    // Fetch stats from API
+    const fetchStats = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const url = `/plugins/${PLUGIN_ID}/api/v1/stats?week_start=${weekStart}&week_end=${weekEnd}`;
+            const res = await fetch(url);
+            if (!res.ok) {
+                throw new Error('Failed to fetch stats');
+            }
+            const data: StatsResponse = await res.json();
+            setStats(data);
+            
+            // Initialize selected users and repos if empty
+            if (selectedUsers.size === 0 && data.users) {
+                setSelectedUsers(new Set(data.users.map(u => u.mm_user_id || u.name)));
+            }
+            if (selectedRepos.size === 0 && data.repos) {
+                setSelectedRepos(new Set(data.repos));
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Unknown error');
+        } finally {
+            setLoading(false);
+        }
+    }, [weekStart, weekEnd]);
+
+    useEffect(() => {
+        fetchStats();
+    }, [fetchStats]);
+
+    // Toggle user selection
+    const toggleUser = (userId: string) => {
+        setSelectedUsers(prev => {
+            const next = new Set(prev);
+            if (next.has(userId)) {
+                next.delete(userId);
+            } else {
+                next.add(userId);
+            }
+            return next;
+        });
     };
 
-    const getFilteredStats = useCallback(() => {
-        const result: Record<string, {name: string; commits: number; added: number; removed: number}> = {};
-        
-        for (const email of selectedUsers) {
-            const userData = data[email];
-            if (!userData) continue;
-            
-            let commits = 0, added = 0, removed = 0;
-            
-            for (const [week, stats] of Object.entries(userData.weekly)) {
-                if (week >= dateRange.start && week <= dateRange.end) {
-                    commits += stats.commits;
-                    added += stats.added;
-                    removed += stats.removed;
-                }
+    // Toggle repo selection
+    const toggleRepo = (repo: string) => {
+        setSelectedRepos(prev => {
+            const next = new Set(prev);
+            if (next.has(repo)) {
+                next.delete(repo);
+            } else {
+                next.add(repo);
             }
-            
-            result[email] = {name: userData.name, commits, added, removed};
-        }
-        
-        return result;
-    }, [selectedUsers, dateRange, data]);
+            return next;
+        });
+    };
 
-    const filteredStats = getFilteredStats();
-    const totalCommits = Object.values(filteredStats).reduce((s, u) => s + u.commits, 0);
-    const totalAdded = Object.values(filteredStats).reduce((s, u) => s + u.added, 0);
-    const totalRemoved = Object.values(filteredStats).reduce((s, u) => s + u.removed, 0);
+    // Filter stats based on selections
+    const filteredUsers = stats?.users.filter(u => {
+        const userId = u.mm_user_id || u.name;
+        if (!selectedUsers.has(userId)) return false;
+        
+        // Check if user has commits in selected repos
+        if (selectedRepos.size > 0 && u.by_repo) {
+            const hasRepoCommits = Object.keys(u.by_repo).some(r => selectedRepos.has(r));
+            if (!hasRepoCommits) return false;
+        }
+        return true;
+    }) || [];
+
+    // Calculate totals
+    const totalCommits = filteredUsers.reduce((s, u) => s + u.commits, 0);
+    const totalAdded = filteredUsers.reduce((s, u) => s + u.added, 0);
+    const totalRemoved = filteredUsers.reduce((s, u) => s + u.removed, 0);
 
     return (
         <div className="github-reports-rhs">
             <div className="rhs-header">
                 <h3>📊 GitHub Activity</h3>
-                <span className="date-range">{dateRange.start} → {dateRange.end}</span>
             </div>
 
-            <div className="filters-section">
-                <div className="filter-group">
-                    <label>Team Members</label>
-                    <div className="user-pills">
-                        {users.map(email => (
-                            <button
-                                key={email}
-                                className={`user-pill ${selectedUsers.includes(email) ? 'active' : ''}`}
-                                onClick={() => toggleUser(email)}
-                            >
-                                {data[email]?.name || email}
-                            </button>
-                        ))}
-                    </div>
+            {/* Date Range - Week Picker */}
+            <div className="date-range-section">
+                <div className="week-picker">
+                    <label>From</label>
+                    <input
+                        type="week"
+                        value={weekStart}
+                        onChange={(e) => setWeekStart(e.target.value)}
+                        className="week-input"
+                    />
+                    <span className="week-display">{formatWeekRange(weekStart)}</span>
                 </div>
-
-                <div className="filter-group">
-                    <label>Date Range</label>
-                    <div className="date-inputs">
-                        <input
-                            type="text"
-                            placeholder="2026-W01"
-                            value={dateRange.start}
-                            onChange={(e) => setDateRange(prev => ({...prev, start: e.target.value}))}
-                        />
-                        <span>→</span>
-                        <input
-                            type="text"
-                            placeholder="2026-W07"
-                            value={dateRange.end}
-                            onChange={(e) => setDateRange(prev => ({...prev, end: e.target.value}))}
-                        />
-                    </div>
+                <div className="week-picker">
+                    <label>To</label>
+                    <input
+                        type="week"
+                        value={weekEnd}
+                        onChange={(e) => setWeekEnd(e.target.value)}
+                        className="week-input"
+                    />
+                    <span className="week-display">{formatWeekRange(weekEnd)}</span>
                 </div>
             </div>
 
-            <div className="stats-overview">
-                <div className="stat-card">
-                    <div className="stat-value">{totalCommits.toLocaleString()}</div>
-                    <div className="stat-label">Commits</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-value green">+{totalAdded.toLocaleString()}</div>
-                    <div className="stat-label">Added</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-value red">-{totalRemoved.toLocaleString()}</div>
-                    <div className="stat-label">Removed</div>
-                </div>
-            </div>
+            {/* Expandable Filters Divider */}
+            <button 
+                className="filters-divider"
+                onClick={() => setShowFilters(!showFilters)}
+            >
+                <span className="divider-line"></span>
+                <span className="divider-text">
+                    {showFilters ? '▲ Hide filters' : '▼ Show more filters'}
+                </span>
+                <span className="divider-line"></span>
+            </button>
 
-            <div className="user-breakdown">
-                <h4>By Team Member</h4>
-                {Object.entries(filteredStats)
-                    .sort((a, b) => b[1].commits - a[1].commits)
-                    .map(([email, stats]) => (
-                        <div key={email} className="user-row">
-                            <div className="user-info">
-                                <span className="user-name">{stats.name}</span>
-                                <span className="user-commits">{stats.commits} commits</span>
-                            </div>
-                            <div className="user-lines">
-                                <span className="added">+{stats.added.toLocaleString()}</span>
-                                <span className="removed">-{stats.removed.toLocaleString()}</span>
-                            </div>
-                            <div className="commit-bar">
-                                <div 
-                                    className="bar-fill"
-                                    style={{width: `${(stats.commits / Math.max(...Object.values(filteredStats).map(s => s.commits))) * 100}%`}}
-                                />
-                            </div>
+            {/* Additional Filters */}
+            {showFilters && (
+                <div className="additional-filters">
+                    {/* Team Members Filter */}
+                    <div className="filter-group">
+                        <label>Team Members</label>
+                        <div className="filter-chips">
+                            {stats?.users.map(user => {
+                                const userId = user.mm_user_id || user.name;
+                                const isSelected = selectedUsers.has(userId);
+                                return (
+                                    <button
+                                        key={userId}
+                                        className={`filter-chip ${isSelected ? 'active' : ''}`}
+                                        onClick={() => toggleUser(userId)}
+                                    >
+                                        {user.mm_username ? `@${user.mm_username}` : user.name}
+                                        <span className="chip-count">{user.commits}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
-                    ))}
-            </div>
+                    </div>
 
-            <div className="rhs-footer">
-                <span>Last updated: {new Date().toLocaleDateString()}</span>
-            </div>
+                    {/* Repositories Filter */}
+                    <div className="filter-group">
+                        <label>Repositories</label>
+                        <div className="filter-chips">
+                            {stats?.repos.map(repo => {
+                                const isSelected = selectedRepos.has(repo);
+                                return (
+                                    <button
+                                        key={repo}
+                                        className={`filter-chip repo ${isSelected ? 'active' : ''}`}
+                                        onClick={() => toggleRepo(repo)}
+                                    >
+                                        {repo}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Loading / Error */}
+            {loading && <div className="loading-indicator">Loading...</div>}
+            {error && <div className="error-message">{error}</div>}
+
+            {/* Stats Overview */}
+            {!loading && stats && (
+                <>
+                    <div className="stats-overview">
+                        <div className="stat-card">
+                            <div className="stat-value">{totalCommits.toLocaleString()}</div>
+                            <div className="stat-label">Commits</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value green">+{totalAdded.toLocaleString()}</div>
+                            <div className="stat-label">Added</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value red">-{totalRemoved.toLocaleString()}</div>
+                            <div className="stat-label">Removed</div>
+                        </div>
+                    </div>
+
+                    {/* User Breakdown */}
+                    <div className="user-breakdown">
+                        <h4>By Team Member</h4>
+                        {filteredUsers
+                            .sort((a, b) => b.commits - a.commits)
+                            .map(user => {
+                                const maxCommits = Math.max(...filteredUsers.map(u => u.commits));
+                                return (
+                                    <div key={user.mm_user_id || user.name} className="user-row">
+                                        <div className="user-info">
+                                            <span className="user-name">
+                                                {user.mm_username ? `@${user.mm_username}` : user.name}
+                                            </span>
+                                            <span className="user-commits">{user.commits} commits</span>
+                                        </div>
+                                        <div className="user-lines">
+                                            <span className="added">+{user.added.toLocaleString()}</span>
+                                            <span className="removed">-{user.removed.toLocaleString()}</span>
+                                        </div>
+                                        <div className="commit-bar">
+                                            <div 
+                                                className="bar-fill"
+                                                style={{width: `${(user.commits / maxCommits) * 100}%`}}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                    </div>
+
+                    <div className="rhs-footer">
+                        <span>Updated: {new Date(stats.last_updated).toLocaleTimeString()}</span>
+                        <button className="refresh-btn" onClick={fetchStats}>↻ Refresh</button>
+                    </div>
+                </>
+            )}
         </div>
     );
 };
